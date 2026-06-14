@@ -15,6 +15,9 @@
             min-height: 100vh;
             margin: 0;
             padding: 20px;
+            /* מניעת גלילה וחווית משחק חלקה יותר בנייד */
+            overflow: hidden;
+            touch-action: none; 
         }
         h1 {
             margin-bottom: 10px;
@@ -34,6 +37,7 @@
             border: 1px solid #888;
             background: #111;
             color: #fff;
+            cursor: pointer;
         }
         #mazeContainer {
             display: grid;
@@ -42,23 +46,31 @@
             padding: 10px;
             border: 2px solid #fff;
             max-width: calc(100vw - 40px);
+            max-height: calc(100vh - 160px);
         }
         .cell {
             width: 18px;
             height: 18px;
             box-sizing: border-box;
             background: #000;
-        }
-        .cell.end {
-            background: #a00;
+            position: relative;
         }
         .cell.start {
             background: #0a0;
         }
-        .cell.player {
-            background-color: #007bff; /* צבע כחול לשחקן */
-            border-radius: 50%; /* הופך את השחקן לעיגול במקום ריבוע */
-            transform: scale(0.7); /* מקטין טיפה כדי שלא יסתיר את הקירות */
+        .cell.end {
+            background: #a00;
+        }
+        /* עיצוב השחקן כעיגול כחול */
+        .cell.player::after {
+            content: '';
+            position: absolute;
+            top: 15%;
+            left: 15%;
+            width: 70%;
+            height: 70%;
+            background-color: #007bff;
+            border-radius: 50%;
         }
     </style>
 </head>
@@ -76,22 +88,27 @@
     <div id="mazeContainer"></div>
 
     <script>
+        // משתני מערכת גלובליים
         let currentMazeGrid = null;
         let playerPos = { row: 0, col: 0 };
         let lastMoveTime = 0;
-        const MOVE_COOLDOWN = 250; // אלפיות שנייה בין כל צעד - אפשר לשנות כדי להאיץ/להאט
-        const TILT_THRESHOLD = 15; // זווית המינימום במעלות הנדרשת כדי לזוז
+        
+        const MOVE_COOLDOWN = 200;  // מהירות תנועה (במילישניות) - ככל שנמוך יותר, השחקן יזוז מהר יותר
+        const TILT_THRESHOLD = 12; // זווית הטיה מינימלית במעלות כדי להחשיב תנועה
+
         function startGame() {
             const difficulty = document.getElementById('difficulty').value;
             generateMaze(difficulty);
-            alert('המשחק מתחיל! נסה לנווט את המבוך הדינאמי.');
-            resetGyro();
+            
+            // הפעלת חיישנים כולל טיפול בהרשאות של iOS (אייפון)
+            initGyroscope();
         }
 
         function generateMaze(difficulty) {
             const size = getMazeSize(difficulty);
             const maze = createMaze(size, size);
-
+            
+            // שמירת המטריצה ואיפוס מיקום השחקן
             currentMazeGrid = maze;
             playerPos = { row: 0, col: 0 };
             
@@ -145,10 +162,10 @@
         function getUnvisitedNeighbors(row, col, grid) {
             const neighbors = [];
             const directions = [
-                { row: row - 1, col, direction: 'top' },
-                { row, col: col + 1, direction: 'right' },
-                { row: row + 1, col, direction: 'bottom' },
-                { row, col: col - 1, direction: 'left' }
+                { row: row - 1, col },
+                { row, col: col + 1 },
+                { row: row + 1, col },
+                { row, col: col - 1 }
             ];
 
             directions.forEach(({ row: nextRow, col: nextCol }) => {
@@ -196,8 +213,10 @@
 
             for (let row = 0; row < rows; row++) {
                 for (let col = 0; col < cols; col++) {
-                    cell.id = `cell-${row}-${col}`; // id for evrey cell
-
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.id = `cell-${row}-${col}`; // מזהה ייחודי לכל משבצת לניהול תנועה חלקה
+                    
                     const walls = grid[row][col].walls;
                     cell.style.borderTop = walls.top ? '2px solid #fff' : '2px solid transparent';
                     cell.style.borderRight = walls.right ? '2px solid #fff' : '2px solid transparent';
@@ -206,44 +225,60 @@
 
                     if (row === 0 && col === 0) {
                         cell.classList.add('start');
-                        cell.classList.add('player'); //starting position of the player
+                        cell.classList.add('player'); // הגדרת מיקום התחלתי לשחקן
                     }
                     if (row === rows - 1 && col === cols - 1) {
-                        cell.classList.add('end'); // exit cell win when player reach it
+                        cell.classList.add('end');
                     }
 
                     container.appendChild(cell);
                 }
             }
         }
-    function resetGyro() {
-        if (window.DeviceOrientationEvent) {
+
+        function initGyroscope() {
+            // בדיקה אם המכשיר דורש בקשת הרשאה מפורשת (מכשירי iOS 13+)
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.removeEventListener('deviceorientation', handleOrientation);
+                            window.addEventListener('deviceorientation', handleOrientation);
+                        } else {
+                            alert('כדי לשחק באמצעות הטיית הטלפון, יש לאשר גישה לחיישנים.');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('שגיאה בקבלת הרשאת חיישנים:', error);
+                    });
+            } else {
+                // למכשירים שלא דורשים הרשאה מיוחדת (אנדרואיד / דסקטופ בסימולטור)
                 window.removeEventListener('deviceorientation', handleOrientation);
                 window.addEventListener('deviceorientation', handleOrientation);
             }
         }
+
         function handleOrientation(event) {
-            const gamma = event.gamma; // ימינה ושמאלה
-            const beta = event.beta;   // קדימה ואחורה
-            
-            // מעביר את הנתונים לפונקציית התנועה
-            MovePlayer(gamma, beta);
+            const gamma = event.gamma; // הטיה ימינה/שמאלה (ציר X)
+            const beta = event.beta;   // הטיה קדימה/אחורה (ציר Y)
+
+            if (gamma !== null && beta !== null) {
+                MovePlayer(gamma, beta);
+            }
         }
 
         function MovePlayer(gamma, beta) {
-            // safty check - maze didn't generate yet so dont do anything
-            if (!currentMazeGrid) return;
+            if (!currentMazeGrid) return; // המשחק עוד לא התחיל או שכבר נגמר
 
             const now = Date.now();
-            // check if enough time has passed since the last move to prevent too fast movement
-            if (now - lastMoveTime < MOVE_COOLDOWN) return;
+            if (now - lastMoveTime < MOVE_COOLDOWN) return; // מניעת ריצה מהירה מדי של הלופ
 
             let moved = false;
             let newRow = playerPos.row;
             let newCol = playerPos.col;
             const currentCell = currentMazeGrid[playerPos.row][playerPos.col];
 
-            // check movement down (tilt forward) / up (tilt backward)
+            // 1. בדיקת תנועה אנכית (קדימה / אחורה)
             if (beta > TILT_THRESHOLD && !currentCell.walls.bottom) {
                 newRow++;
                 moved = true;
@@ -251,7 +286,7 @@
                 newRow--;
                 moved = true;
             } 
-            // check movement right (tilt right) / left (tilt left)
+            // 2. בדיקת תנועה אופקית (ימינה / שמאלה) - מתבצעת רק אם לא זזנו אנכית
             else if (gamma > TILT_THRESHOLD && !currentCell.walls.right) {
                 newCol++;
                 moved = true;
@@ -259,27 +294,28 @@
                 newCol--;
                 moved = true;
             }
-            // if moved is legal (no wall and inside the maze) then update player position
-            if (moved) {
-                //delete player from current cell before moving to the new cell
-                document.getElementById(`cell-${playerPos.row}-${playerPos.col}`).classList.remove('player');
 
-                //update player position
+            if (moved) {
+                // הסרת השחקן מהמיקום הקודם
+                const oldCell = document.getElementById(`cell-${playerPos.row}-${playerPos.col}`);
+                if (oldCell) oldCell.classList.remove('player');
+
+                // עדכון מיקום בזיכרון
                 playerPos.row = newRow;
                 playerPos.col = newCol;
 
-                // מצייר את השחקן בתא החדש
-                document.getElementById(`cell-${playerPos.row}-${playerPos.col}`).classList.add('player');
-                
-                // מעדכן את זמן התנועה האחרון
+                // ציור השחקן במיקום החדש
+                const newCell = document.getElementById(`cell-${playerPos.row}-${playerPos.col}`);
+                if (newCell) newCell.classList.add('player');
+
                 lastMoveTime = now;
 
-                // בדיקת ניצחון (הגעה לתא האחרון למטה-ימינה)
+                // בדיקת תנאי ניצחון (הגעה לתא האחרון במטריצה)
                 if (playerPos.row === currentMazeGrid.length - 1 && playerPos.col === currentMazeGrid[0].length - 1) {
+                    currentMazeGrid = null; // עצירת תנועה
                     setTimeout(() => {
-                        alert('כל הכבוד! סיימת את המבוך!');
-                    }, 100); // השהייה קלה כדי שהשחקן יספיק לראות שהוא הגיע לסוף
-                    currentMazeGrid = null; // עוצר את המשחק עד ללחיצה על "התחל" שוב
+                        alert('כל הכבוד! הצלחת לצאת מהמבוך! 🎉');
+                    }, 150);
                 }
             }
         }
