@@ -49,11 +49,13 @@
             box-sizing: border-box;
             background: #000;
         }
-        .cell.start {
-            background: #0a0;
-        }
         .cell.end {
             background: #a00;
+        }
+        .cell.player {
+            background-color: #007bff; /* צבע כחול לשחקן */
+            border-radius: 50%; /* הופך את השחקן לעיגול במקום ריבוע */
+            transform: scale(0.7); /* מקטין טיפה כדי שלא יסתיר את הקירות */
         }
     </style>
 </head>
@@ -71,6 +73,11 @@
     <div id="mazeContainer"></div>
 
     <script>
+        let currentMazeGrid = null;
+        let playerPos = { row: 0, col: 0 };
+        let lastMoveTime = 0;
+        const MOVE_COOLDOWN = 250; // אלפיות שנייה בין כל צעד - אפשר לשנות כדי להאיץ/להאט
+        const TILT_THRESHOLD = 15; // זווית המינימום במעלות הנדרשת כדי לזוז
         function startGame() {
             const difficulty = document.getElementById('difficulty').value;
             generateMaze(difficulty);
@@ -81,6 +88,10 @@
         function generateMaze(difficulty) {
             const size = getMazeSize(difficulty);
             const maze = createMaze(size, size);
+
+            currentMazeGrid = maze;
+            playerPos = { row: 0, col: 0 };
+            
             renderMaze(maze);
         }
 
@@ -182,8 +193,8 @@
 
             for (let row = 0; row < rows; row++) {
                 for (let col = 0; col < cols; col++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'cell';
+                    cell.id = `cell-${row}-${col}`; // id for evrey cell
+
                     const walls = grid[row][col].walls;
                     cell.style.borderTop = walls.top ? '2px solid #fff' : '2px solid transparent';
                     cell.style.borderRight = walls.right ? '2px solid #fff' : '2px solid transparent';
@@ -192,9 +203,10 @@
 
                     if (row === 0 && col === 0) {
                         cell.classList.add('start');
+                        cell.classList.add('player'); //starting position of the player
                     }
                     if (row === rows - 1 && col === cols - 1) {
-                        cell.classList.add('end');
+                        cell.classList.add('end'); // exit cell win when player reach it
                     }
 
                     container.appendChild(cell);
@@ -207,18 +219,67 @@
                 window.addEventListener('deviceorientation', handleOrientation);
             }
         }
+        function handleOrientation(event) {
+            const gamma = event.gamma; // ימינה ושמאלה
+            const beta = event.beta;   // קדימה ואחורה
+            
+            // מעביר את הנתונים לפונקציית התנועה
+            MovePlayer(gamma, beta);
+        }
 
-    function handleOrientation(event) {
-        const gamma = event.gamma; // Left to right
-        const beta = event.beta; // Front to back
-        const alpha = event.alpha; // Compass direction
+        function MovePlayer(gamma, beta) {
+            // safty check - maze didn't generate yet so dont do anything
+            if (!currentMazeGrid) return;
 
-        // Implement game logic based on device orientation
-        console.log(`Gamma: ${gamma}, Beta: ${beta}, Alpha: ${alpha}`);
-    }
-    function MovePlayer(direction) {
-        
-    }
+            const now = Date.now();
+            // check if enough time has passed since the last move to prevent too fast movement
+            if (now - lastMoveTime < MOVE_COOLDOWN) return;
+
+            let moved = false;
+            let newRow = playerPos.row;
+            let newCol = playerPos.col;
+            const currentCell = currentMazeGrid[playerPos.row][playerPos.col];
+
+            // check movement down (tilt forward) / up (tilt backward)
+            if (beta > TILT_THRESHOLD && !currentCell.walls.bottom) {
+                newRow++;
+                moved = true;
+            } else if (beta < -TILT_THRESHOLD && !currentCell.walls.top) {
+                newRow--;
+                moved = true;
+            } 
+            // check movement right (tilt right) / left (tilt left)
+            else if (gamma > TILT_THRESHOLD && !currentCell.walls.right) {
+                newCol++;
+                moved = true;
+            } else if (gamma < -TILT_THRESHOLD && !currentCell.walls.left) {
+                newCol--;
+                moved = true;
+            }
+            // if moved is legal (no wall and inside the maze) then update player position
+            if (moved) {
+                //delete player from current cell before moving to the new cell
+                document.getElementById(`cell-${playerPos.row}-${playerPos.col}`).classList.remove('player');
+
+                //update player position
+                playerPos.row = newRow;
+                playerPos.col = newCol;
+
+                // מצייר את השחקן בתא החדש
+                document.getElementById(`cell-${playerPos.row}-${playerPos.col}`).classList.add('player');
+                
+                // מעדכן את זמן התנועה האחרון
+                lastMoveTime = now;
+
+                // בדיקת ניצחון (הגעה לתא האחרון למטה-ימינה)
+                if (playerPos.row === currentMazeGrid.length - 1 && playerPos.col === currentMazeGrid[0].length - 1) {
+                    setTimeout(() => {
+                        alert('כל הכבוד! סיימת את המבוך!');
+                    }, 100); // השהייה קלה כדי שהשחקן יספיק לראות שהוא הגיע לסוף
+                    currentMazeGrid = null; // עוצר את המשחק עד ללחיצה על "התחל" שוב
+                }
+            }
+        }
     </script>
 </body>
 </html>
