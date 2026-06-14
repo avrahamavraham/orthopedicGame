@@ -87,238 +87,254 @@
     </div>
     <div id="mazeContainer"></div>
 
-    <script>
-        // משתני מערכת גלובליים
-        let currentMazeGrid = null;
-        let playerPos = { row: 0, col: 0 };
-        let lastMoveTime = 0;
+<script>
+    // משתני מערכת גלובליים
+    let currentMazeGrid = null;
+    let playerPos = { row: 0, col: 0 };
+    let lastMoveTime = 0;
+    
+    // משתני דינאמיים שישתנו לפי רמת הקושי
+    let moveCooldown = 200;   // מהירות תנועה (במילישניות)
+    let tiltThreshold = 12;   // זווית הטיה מינימלית במעלות
+
+    // גודל מבוך קבוע לכל הרמות
+    const FIXED_MAZE_SIZE = 21; 
+
+    function startGame() {
+        const difficulty = document.getElementById('difficulty').value;
         
-        const MOVE_COOLDOWN = 200;  // מהירות תנועה (במילישניות) - ככל שנמוך יותר, השחקן יזוז מהר יותר
-        const TILT_THRESHOLD = 12; // זווית הטיה מינימלית במעלות כדי להחשיב תנועה
+        // הגדרת הרגישות בהתאם לקושי שנבחר
+        setSensitivity(difficulty);
+        
+        // יצירת המבוך בגודל הקבוע
+        generateMaze();
+        
+        // הפעלת חיישנים כולל טיפול בהרשאות של iOS (אייפון)
+        initGyroscope();
+    }
 
-        function startGame() {
-            const difficulty = document.getElementById('difficulty').value;
-            generateMaze(difficulty);
-            
-            // הפעלת חיישנים כולל טיפול בהרשאות של iOS (אייפון)
-            initGyroscope();
+    function setSensitivity(difficulty) {
+        switch (difficulty) {
+            case 'hard':
+                // קשה: רגיש מאוד (מספיקה הטיה של 5 מעלות) וזז מהר מאוד (כל 120 מילישניות)
+                tiltThreshold = 5;
+                moveCooldown = 120;
+                break;
+            case 'medium':
+                // בינוני: ערכים מאוזנים
+                tiltThreshold = 12;
+                moveCooldown = 200;
+                break;
+            case 'easy':
+            default:
+                // קל: דורש הטיה חזקה (20 מעלות) וזז לאט (כל 350 מילישניות) כדי לאבד פחות שליטה
+                tiltThreshold = 20;
+                moveCooldown = 350;
+                break;
         }
+        console.log(`Difficulty set to ${difficulty}: Threshold=${tiltThreshold}°, Cooldown=${moveCooldown}ms`);
+    }
 
-        function generateMaze(difficulty) {
-            const size = getMazeSize(difficulty);
-            const maze = createMaze(size, size);
-            
-            // שמירת המטריצה ואיפוס מיקום השחקן
-            currentMazeGrid = maze;
-            playerPos = { row: 0, col: 0 };
-            
-            renderMaze(maze);
-        }
+    function generateMaze() {
+        // שימוש בגודל הקבוע שהגדרנו למעלה
+        const maze = createMaze(FIXED_MAZE_SIZE, FIXED_MAZE_SIZE);
+        
+        // שמירת המטריצה ואיפוס מיקום השחקן
+        currentMazeGrid = maze;
+        playerPos = { row: 0, col: 0 };
+        
+        renderMaze(maze);
+    }
 
-        function getMazeSize(difficulty) {
-            switch (difficulty) {
-                case 'hard':
-                    return 31;
-                case 'medium':
-                    return 21;
-                default:
-                    return 15;
-            }
-        }
+    function createMaze(rows, cols) {
+        const grid = Array.from({ length: rows }, () =>
+            Array.from({ length: cols }, () => ({
+                visited: false,
+                walls: { top: true, right: true, bottom: true, left: true }
+            }))
+        );
 
-        function createMaze(rows, cols) {
-            const grid = Array.from({ length: rows }, () =>
-                Array.from({ length: cols }, () => ({
-                    visited: false,
-                    walls: { top: true, right: true, bottom: true, left: true }
-                }))
-            );
+        const stack = [];
+        const startRow = 0;
+        const startCol = 0;
+        grid[startRow][startCol].visited = true;
+        stack.push({ row: startRow, col: startCol });
 
-            const stack = [];
-            const startRow = 0;
-            const startCol = 0;
-            grid[startRow][startCol].visited = true;
-            stack.push({ row: startRow, col: startCol });
+        while (stack.length > 0) {
+            const current = stack[stack.length - 1];
+            const neighbors = getUnvisitedNeighbors(current.row, current.col, grid);
 
-            while (stack.length > 0) {
-                const current = stack[stack.length - 1];
-                const neighbors = getUnvisitedNeighbors(current.row, current.col, grid);
-
-                if (neighbors.length > 0) {
-                    const next = neighbors[Math.floor(Math.random() * neighbors.length)];
-                    removeWalls(current, next, grid);
-                    grid[next.row][next.col].visited = true;
-                    stack.push(next);
-                } else {
-                    stack.pop();
-                }
-            }
-
-            grid[0][0].walls.top = false;
-            grid[rows - 1][cols - 1].walls.bottom = false;
-            return grid;
-        }
-
-        function getUnvisitedNeighbors(row, col, grid) {
-            const neighbors = [];
-            const directions = [
-                { row: row - 1, col },
-                { row, col: col + 1 },
-                { row: row + 1, col },
-                { row, col: col - 1 }
-            ];
-
-            directions.forEach(({ row: nextRow, col: nextCol }) => {
-                if (
-                    nextRow >= 0 &&
-                    nextRow < grid.length &&
-                    nextCol >= 0 &&
-                    nextCol < grid[0].length &&
-                    !grid[nextRow][nextCol].visited
-                ) {
-                    neighbors.push({ row: nextRow, col: nextCol });
-                }
-            });
-
-            return neighbors;
-        }
-
-        function removeWalls(current, next, grid) {
-            const x = current.col - next.col;
-            const y = current.row - next.row;
-
-            if (x === 1) {
-                grid[current.row][current.col].walls.left = false;
-                grid[next.row][next.col].walls.right = false;
-            } else if (x === -1) {
-                grid[current.row][current.col].walls.right = false;
-                grid[next.row][next.col].walls.left = false;
-            }
-
-            if (y === 1) {
-                grid[current.row][current.col].walls.top = false;
-                grid[next.row][next.col].walls.bottom = false;
-            } else if (y === -1) {
-                grid[current.row][current.col].walls.bottom = false;
-                grid[next.row][next.col].walls.top = false;
-            }
-        }
-
-        function renderMaze(grid) {
-            const container = document.getElementById('mazeContainer');
-            const rows = grid.length;
-            const cols = grid[0].length;
-            container.innerHTML = '';
-            container.style.gridTemplateColumns = `repeat(${cols}, 18px)`;
-
-            for (let row = 0; row < rows; row++) {
-                for (let col = 0; col < cols; col++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'cell';
-                    cell.id = `cell-${row}-${col}`; // מזהה ייחודי לכל משבצת לניהול תנועה חלקה
-                    
-                    const walls = grid[row][col].walls;
-                    cell.style.borderTop = walls.top ? '2px solid #fff' : '2px solid transparent';
-                    cell.style.borderRight = walls.right ? '2px solid #fff' : '2px solid transparent';
-                    cell.style.borderBottom = walls.bottom ? '2px solid #fff' : '2px solid transparent';
-                    cell.style.borderLeft = walls.left ? '2px solid #fff' : '2px solid transparent';
-
-                    if (row === 0 && col === 0) {
-                        cell.classList.add('start');
-                        cell.classList.add('player'); // הגדרת מיקום התחלתי לשחקן
-                    }
-                    if (row === rows - 1 && col === cols - 1) {
-                        cell.classList.add('end');
-                    }
-
-                    container.appendChild(cell);
-                }
-            }
-        }
-
-        function initGyroscope() {
-            // בדיקה אם המכשיר דורש בקשת הרשאה מפורשת (מכשירי iOS 13+)
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission()
-                    .then(permissionState => {
-                        if (permissionState === 'granted') {
-                            window.removeEventListener('deviceorientation', handleOrientation);
-                            window.addEventListener('deviceorientation', handleOrientation);
-                        } else {
-                            alert('כדי לשחק באמצעות הטיית הטלפון, יש לאשר גישה לחיישנים.');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('שגיאה בקבלת הרשאת חיישנים:', error);
-                    });
+            if (neighbors.length > 0) {
+                const next = neighbors[Math.floor(Math.random() * neighbors.length)];
+                removeWalls(current, next, grid);
+                grid[next.row][next.col].visited = true;
+                stack.push(next);
             } else {
-                // למכשירים שלא דורשים הרשאה מיוחדת (אנדרואיד / דסקטופ בסימולטור)
-                window.removeEventListener('deviceorientation', handleOrientation);
-                window.addEventListener('deviceorientation', handleOrientation);
+                stack.pop();
             }
         }
 
-        function handleOrientation(event) {
-            const gamma = event.gamma; // הטיה ימינה/שמאלה (ציר X)
-            const beta = event.beta;   // הטיה קדימה/אחורה (ציר Y)
+        grid[0][0].walls.top = false;
+        grid[rows - 1][cols - 1].walls.bottom = false;
+        return grid;
+    }
 
-            if (gamma !== null && beta !== null) {
-                MovePlayer(gamma, beta);
+    function getUnvisitedNeighbors(row, col, grid) {
+        const neighbors = [];
+        const directions = [
+            { row: row - 1, col },
+            { row, col: col + 1 },
+            { row: row + 1, col },
+            { row, col: col - 1 }
+        ];
+
+        directions.forEach(({ row: nextRow, col: nextCol }) => {
+            if (
+                nextRow >= 0 &&
+                nextRow < grid.length &&
+                nextCol >= 0 &&
+                nextCol < grid[0].length &&
+                !grid[nextRow][nextCol].visited
+            ) {
+                neighbors.push({ row: nextRow, col: nextCol });
             }
+        });
+
+        return neighbors;
+    }
+
+    function removeWalls(current, next, grid) {
+        const x = current.col - next.col;
+        const y = current.row - next.row;
+
+        if (x === 1) {
+            grid[current.row][current.col].walls.left = false;
+            grid[next.row][next.col].walls.right = false;
+        } else if (x === -1) {
+            grid[current.row][current.col].walls.right = false;
+            grid[next.row][next.col].walls.left = false;
         }
 
-        function MovePlayer(gamma, beta) {
-            if (!currentMazeGrid) return; // המשחק עוד לא התחיל או שכבר נגמר
+        if (y === 1) {
+            grid[current.row][current.col].walls.top = false;
+            grid[next.row][next.col].walls.bottom = false;
+        } else if (y === -1) {
+            grid[current.row][current.col].walls.bottom = false;
+            grid[next.row][next.col].walls.top = false;
+        }
+    }
 
-            const now = Date.now();
-            if (now - lastMoveTime < MOVE_COOLDOWN) return; // מניעת ריצה מהירה מדי של הלופ
+    function renderMaze(grid) {
+        const container = document.getElementById('mazeContainer');
+        const rows = grid.length;
+        const cols = grid[0].length;
+        container.innerHTML = '';
+        container.style.gridTemplateColumns = `repeat(${cols}, 18px)`;
 
-            let moved = false;
-            let newRow = playerPos.row;
-            let newCol = playerPos.col;
-            const currentCell = currentMazeGrid[playerPos.row][playerPos.col];
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.id = `cell-${row}-${col}`;
+                
+                const walls = grid[row][col].walls;
+                cell.style.borderTop = walls.top ? '2px solid #fff' : '2px solid transparent';
+                cell.style.borderRight = walls.right ? '2px solid #fff' : '2px solid transparent';
+                cell.style.borderBottom = walls.bottom ? '2px solid #fff' : '2px solid transparent';
+                cell.style.borderLeft = walls.left ? '2px solid #fff' : '2px solid transparent';
 
-            // 1. בדיקת תנועה אנכית (קדימה / אחורה)
-            if (beta > TILT_THRESHOLD && !currentCell.walls.bottom) {
-                newRow++;
-                moved = true;
-            } else if (beta < -TILT_THRESHOLD && !currentCell.walls.top) {
-                newRow--;
-                moved = true;
-            } 
-            // 2. בדיקת תנועה אופקית (ימינה / שמאלה) - מתבצעת רק אם לא זזנו אנכית
-            else if (gamma > TILT_THRESHOLD && !currentCell.walls.right) {
-                newCol++;
-                moved = true;
-            } else if (gamma < -TILT_THRESHOLD && !currentCell.walls.left) {
-                newCol--;
-                moved = true;
-            }
-
-            if (moved) {
-                // הסרת השחקן מהמיקום הקודם
-                const oldCell = document.getElementById(`cell-${playerPos.row}-${playerPos.col}`);
-                if (oldCell) oldCell.classList.remove('player');
-
-                // עדכון מיקום בזיכרון
-                playerPos.row = newRow;
-                playerPos.col = newCol;
-
-                // ציור השחקן במיקום החדש
-                const newCell = document.getElementById(`cell-${playerPos.row}-${playerPos.col}`);
-                if (newCell) newCell.classList.add('player');
-
-                lastMoveTime = now;
-
-                // בדיקת תנאי ניצחון (הגעה לתא האחרון במטריצה)
-                if (playerPos.row === currentMazeGrid.length - 1 && playerPos.col === currentMazeGrid[0].length - 1) {
-                    currentMazeGrid = null; // עצירת תנועה
-                    setTimeout(() => {
-                        alert('כל הכבוד! הצלחת לצאת מהמבוך! 🎉');
-                    }, 150);
+                if (row === 0 && col === 0) {
+                    cell.classList.add('start');
+                    cell.classList.add('player');
                 }
+                if (row === rows - 1 && col === cols - 1) {
+                    cell.classList.add('end');
+                }
+
+                container.appendChild(cell);
             }
         }
-    </script>
+    }
+
+    function initGyroscope() {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission()
+                .then(permissionState => {
+                    if (permissionState === 'granted') {
+                        window.removeEventListener('deviceorientation', handleOrientation);
+                        window.addEventListener('deviceorientation', handleOrientation);
+                    } else {
+                        alert('כדי לשחק באמצעות הטיית הטלפון, יש לאשר גישה לחיישנים.');
+                    }
+                })
+                .catch(error => {
+                    console.error('שגיאה בקבלת הרשאת חיישנים:', error);
+                });
+        } else {
+            window.removeEventListener('deviceorientation', handleOrientation);
+            window.addEventListener('deviceorientation', handleOrientation);
+        }
+    }
+
+    function handleOrientation(event) {
+        const gamma = event.gamma;
+        const beta = event.beta;
+
+        if (gamma !== null && beta !== null) {
+            MovePlayer(gamma, beta);
+        }
+    }
+
+    function MovePlayer(gamma, beta) {
+        if (!currentMazeGrid) return; 
+
+        const now = Date.now();
+        // משתמשים במשתנה moveCooldown הדינמי במקום הקבוע שהיה מקודם
+        if (now - lastMoveTime < moveCooldown) return; 
+
+        let moved = false;
+        let newRow = playerPos.row;
+        let newCol = playerPos.col;
+        const currentCell = currentMazeGrid[playerPos.row][playerPos.col];
+
+        // בדיקת תנועה אנכית (קדימה / אחורה) תוך שימוש ב-tiltThreshold הדינמי
+        if (beta > tiltThreshold && !currentCell.walls.bottom) {
+            newRow++;
+            moved = true;
+        } else if (beta < -tiltThreshold && !currentCell.walls.top) {
+            newRow--;
+            moved = true;
+        } 
+        // בדיקת תנועה אופקית (ימינה / שמאלה)
+        else if (gamma > tiltThreshold && !currentCell.walls.right) {
+            newCol++;
+            moved = true;
+        } else if (gamma < -tiltThreshold && !currentCell.walls.left) {
+            newCol--;
+            moved = true;
+        }
+
+        if (moved) {
+            const oldCell = document.getElementById(`cell-${playerPos.row}-${playerPos.col}`);
+            if (oldCell) oldCell.classList.remove('player');
+
+            playerPos.row = newRow;
+            playerPos.col = newCol;
+
+            const newCell = document.getElementById(`cell-${playerPos.row}-${playerPos.col}`);
+            if (newCell) newCell.classList.add('player');
+
+            lastMoveTime = now;
+
+            if (playerPos.row === currentMazeGrid.length - 1 && playerPos.col === currentMazeGrid[0].length - 1) {
+                currentMazeGrid = null; 
+                setTimeout(() => {
+                    alert('כל הכבוד! הצלחת לצאת מהמבוך! 🎉');
+                }, 150);
+            }
+        }
+    }
+</script>
+
 </body>
 </html>
