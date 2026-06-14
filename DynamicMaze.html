@@ -75,6 +75,7 @@
             const difficulty = document.getElementById('difficulty').value;
             generateMaze(difficulty);
             alert('המשחק מתחיל! נסה לנווט את המבוך הדינאמי.');
+            resetGyro();
         }
 
         function generateMaze(difficulty) {
@@ -200,6 +201,24 @@
                 }
             }
         }
+    function resetGyro() {
+        if (window.DeviceOrientationEvent) {
+                window.removeEventListener('deviceorientation', handleOrientation);
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+        }
+
+    function handleOrientation(event) {
+        const gamma = event.gamma; // Left to right
+        const beta = event.beta; // Front to back
+        const alpha = event.alpha; // Compass direction
+
+        // Implement game logic based on device orientation
+        console.log(`Gamma: ${gamma}, Beta: ${beta}, Alpha: ${alpha}`);
+    }
+    function MovePlayer(direction) {
+        
+    }
     </script>
 </body>
 </html>
