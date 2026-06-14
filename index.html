@@ -1,25 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="he">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>orthopedic Game</title>
+    <title>משחק אורתופדי</title>
 </head>
-<body>
-    <h1>Welcome to the Orthopedic Game!</h1>
-    <p> yaw = <span id="yawValue">0</span> degrees</p>
-    <script>
-        function getYaw() {
-            if (window.DeviceOrientationEvent) {
-                window.addEventListener('deviceorientation', function(event) {
-                    var yaw = event.alpha; // Yaw angle in degrees
-                    document.getElementById('yawValue').textContent = yaw.toFixed(2);
-                }, true);
-            } else {
-                console.log('Device orientation not supported.');
-            }
-        }
-        getYaw();
-    </script>
+<body style="background-color: #000000; font-family: Arial, sans-serif; color: #ffffff;">
+    <br>
+    <br>
+    <h1 style="text-align: center;">ברוך הבא לאתר למשחקים אורטופדים</h1>
+    <p style="text-align: center;"> האתר מכיל משחקים שבהם אתה יכול לתרגל את היכולת האורתופדית שלך.</p>
+    <br>
+    <h3 style="text-align: center;">בחר משחק:</h3>
+    <div style="display: flex; justify-content: center; gap: 20px;">
+        <a href="game1.html" style="background-color: #007BFF; color: #ffffff; 
+        padding: 10px 20px; text-decoration: none; border-radius: 5px;">משחק אורתופדי 1</a>
+        <a href="game2.html" style="background-color: #28A745; color: #ffffff; 
+        padding: 10px 20px; text-decoration: none; border-radius: 5px;">משחק אורתופדי 2</a>
+        <a href="game3.html" style="background-color: #DC3545; color: #ffffff; 
+        padding: 10px 20px; text-decoration: none; border-radius: 5px;">משחק אורתופדי 3</a>
+    
 </body>
 </html>
