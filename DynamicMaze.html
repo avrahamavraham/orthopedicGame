@@ -94,11 +94,11 @@
     let lastMoveTime = 0;
     
     // משתני דינאמיים שישתנו לפי רמת הקושי
-    let moveCooldown = 200;   // מהירות תנועה (במילישניות)
+    const moveCooldown = 100;   // מהירות תנועה (במילישניות)
     let tiltThreshold = 12;   // זווית הטיה מינימלית במעלות
 
     // גודל מבוך קבוע לכל הרמות
-    const FIXED_MAZE_SIZE = 21; 
+    const FIXED_MAZE_SIZE = 36; 
 
     function startGame() {
         const difficulty = document.getElementById('difficulty').value;
@@ -118,19 +118,18 @@
             case 'hard':
                 // קשה: רגיש מאוד (מספיקה הטיה של 5 מעלות) וזז מהר מאוד (כל 120 מילישניות)
                 tiltThreshold = 5;
-                moveCooldown = 120;
                 break;
             case 'medium':
                 // בינוני: ערכים מאוזנים
                 tiltThreshold = 12;
-                moveCooldown = 200;
                 break;
             case 'easy':
-            default:
                 // קל: דורש הטיה חזקה (20 מעלות) וזז לאט (כל 350 מילישניות) כדי לאבד פחות שליטה
                 tiltThreshold = 20;
-                moveCooldown = 350;
                 break;
+            default:
+                tiltThreshold = 30;
+            break;
         }
         console.log(`Difficulty set to ${difficulty}: Threshold=${tiltThreshold}°, Cooldown=${moveCooldown}ms`);
     }
@@ -335,6 +334,5 @@
         }
     }
 </script>
-
 </body>
 </html>
