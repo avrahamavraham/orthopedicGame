@@ -94,8 +94,8 @@
     let lastMoveTime = 0;
     
     // משתני דינאמיים שישתנו לפי רמת הקושי
-    const BaseMoveCooldown = 600;   // מהירות תנועה (במילישניות)
-    let tiltThreshold = 12;   // זווית הטיה מינימלית במעלות
+    const BaseMoveCooldown = 500;   // מהירות התנועה ההתחלתית (הכי איטית) במצב מנוחה/נטייה קלה
+    let tiltThreshold = 12;         // זווית הטיה מינימלית במעלות להתחלת תנועה
 
     // גודל מבוך קבוע לכל הרמות
     const FIXED_MAZE_SIZE = 21; 
@@ -116,7 +116,7 @@
     function setSensitivity(difficulty) {
         switch (difficulty) {
             case 'hard':
-                // קשה: רגיש מאוד (מספיקה הטיה של 5 מעלות) וזז מהר מאוד (כל 120 מילישניות)
+                // קשה: רגיש מאוד (מספיקה הטיה של 5 מעלות כדי לזוז)
                 tiltThreshold = 5;
                 break;
             case 'medium':
@@ -124,24 +124,20 @@
                 tiltThreshold = 12;
                 break;
             case 'easy':
-                // קל: דורש הטיה חזקה (20 מעלות) וזז לאט (כל 350 מילישניות) כדי לאבד פחות שליטה
+                // קל: דורש הטיה חזקה יותר (20 מעלות) כדי להתחיל לזוז
                 tiltThreshold = 20;
                 break;
             default:
-                tiltThreshold = 30;
+                tiltThreshold = 12;
             break;
         }
         console.log(`Difficulty set to ${difficulty}: Threshold=${tiltThreshold}°`);
     }
 
     function generateMaze() {
-        // שימוש בגודל הקבוע שהגדרנו למעלה
         const maze = createMaze(FIXED_MAZE_SIZE, FIXED_MAZE_SIZE);
-        
-        // שמירת המטריצה ואיפוס מיקום השחקן
         currentMazeGrid = maze;
         playerPos = { row: 0, col: 0 };
-        
         renderMaze(maze);
     }
 
@@ -278,7 +274,7 @@
     function handleOrientation(event) {
         const gamma = event.gamma;
         const beta = event.beta;
-
+        const alpha = event.alpha;
         if (gamma !== null && beta !== null) {
             MovePlayer(gamma, beta);
         }
@@ -287,13 +283,25 @@
     function MovePlayer(gamma, beta) {
         if (!currentMazeGrid) return; 
 
-        const now = Date.now();
-        // Ensure we don't use negative numbers, and cap the tilt so it doesn't exceed 1
-        const tiltIntensity = Math.max(Math.abs(gamma), Math.abs(beta)) * tiltThreshold;
+        // 1. מציאת עוצמת ההטיה המקסימלית הנוכחית (ערך מוחלט כדי להתעלם מכיוון שלילי)
+        const currentTilt = Math.max(Math.abs(gamma), Math.abs(beta));
 
-        // Subtracting from BaseMoveCooldown or dividing properly:
-        const moveCooldown = BaseMoveCooldown / Math.max(tiltIntensity, 1); // התאמת מהירות התנועה לפי רמת הקושי
-        // משתמשים במשתנה moveCooldown הדינמי במקום הקבוע שהיה מקודם
+        // 2. תנאי סף: אם ההטיה קטנה מהרף הנדרש, השחקן בכלל לא זז
+        if (currentTilt < tiltThreshold) return;
+
+        // 3. חישוב פקטור מהירות דינמי (נע בין 0 ל-1)
+        // ככל שמטים יותר מעבר ל-tiltThreshold, ככה הערך מתקרב ל-1. הגבלנו להטיה מקסימלית של 45 מעלות.
+        const maxTiltLimit = 45;
+        const tiltRange = maxTiltLimit - tiltThreshold;
+        const excessTilt = Math.min(currentTilt - tiltThreshold, tiltRange);
+        const speedFactor = excessTilt / tiltRange; // ערך בין 0.0 (איטי) ל-1.0 (מהיר)
+
+        // 4. חישוב ה-Cooldown בפועל
+        // במצב הכי מהיר (הטיה חזקה), ה-Cooldown יירד עד ל-20% מהערך המקורי (תנועה מהירה פי 5)
+        const minCooldown = BaseMoveCooldown * 0.2; 
+        const moveCooldown = BaseMoveCooldown - (speedFactor * (BaseMoveCooldown - minCooldown));
+
+        const now = Date.now();
         if (now - lastMoveTime < moveCooldown) return; 
 
         let moved = false;
@@ -301,21 +309,25 @@
         let newCol = playerPos.col;
         const currentCell = currentMazeGrid[playerPos.row][playerPos.col];
 
-        // בדיקת תנועה אנכית (קדימה / אחורה) תוך שימוש ב-tiltThreshold הדינמי
-        if (beta > tiltThreshold && !currentCell.walls.bottom) {
-            newRow++;
-            moved = true;
-        } else if (beta < -tiltThreshold && !currentCell.walls.top) {
-            newRow--;
-            moved = true;
-        } 
-        // בדיקת תנועה אופקית (ימינה / שמאלה)
-        else if (gamma > tiltThreshold && !currentCell.walls.right) {
-            newCol++;
-            moved = true;
-        } else if (gamma < -tiltThreshold && !currentCell.walls.left) {
-            newCol--;
-            moved = true;
+        // בדיקת כיוון התנועה הדומיננטי (האם מטים יותר לאורך או לרוחב)
+        if (Math.abs(beta) > Math.abs(gamma)) {
+            // תנועה אנכית (למעלה / למטה)
+            if (beta > tiltThreshold && !currentCell.walls.bottom) {
+                newRow++;
+                moved = true;
+            } else if (beta < -tiltThreshold && !currentCell.walls.top) {
+                newRow--;
+                moved = true;
+            }
+        } else {
+            // תנועה אופקית (ימינה / שמאלה)
+            if (gamma > tiltThreshold && !currentCell.walls.right) {
+                newCol++;
+                moved = true;
+            } else if (gamma < -tiltThreshold && !currentCell.walls.left) {
+                newCol--;
+                moved = true;
+            }
         }
 
         if (moved) {
