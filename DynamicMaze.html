@@ -94,7 +94,7 @@
     let lastMoveTime = 0;
     
     // משתני דינאמיים שישתנו לפי רמת הקושי
-    const moveCooldown = 100;   // מהירות תנועה (במילישניות)
+    const BaseMoveCooldown = 600;   // מהירות תנועה (במילישניות)
     let tiltThreshold = 12;   // זווית הטיה מינימלית במעלות
 
     // גודל מבוך קבוע לכל הרמות
@@ -131,7 +131,7 @@
                 tiltThreshold = 30;
             break;
         }
-        console.log(`Difficulty set to ${difficulty}: Threshold=${tiltThreshold}°, Cooldown=${moveCooldown}ms`);
+        console.log(`Difficulty set to ${difficulty}: Threshold=${tiltThreshold}°`);
     }
 
     function generateMaze() {
@@ -288,6 +288,7 @@
         if (!currentMazeGrid) return; 
 
         const now = Date.now();
+        const moveCooldown = BaseMoveCooldown / Math.max(gamma * tiltThreshold, beta * tiltThreshold); // התאמת מהירות התנועה לפי רמת הקושי
         // משתמשים במשתנה moveCooldown הדינמי במקום הקבוע שהיה מקודם
         if (now - lastMoveTime < moveCooldown) return; 
 
