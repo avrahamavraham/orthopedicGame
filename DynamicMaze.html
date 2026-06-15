@@ -288,7 +288,11 @@
         if (!currentMazeGrid) return; 
 
         const now = Date.now();
-        const moveCooldown = BaseMoveCooldown / Math.max(gamma * tiltThreshold, beta * tiltThreshold); // התאמת מהירות התנועה לפי רמת הקושי
+        // Ensure we don't use negative numbers, and cap the tilt so it doesn't exceed 1
+        const tiltIntensity = Math.max(Math.abs(gamma), Math.abs(beta)) * tiltThreshold;
+
+        // Subtracting from BaseMoveCooldown or dividing properly:
+        const moveCooldown = BaseMoveCooldown / Math.max(tiltIntensity, 1); // התאמת מהירות התנועה לפי רמת הקושי
         // משתמשים במשתנה moveCooldown הדינמי במקום הקבוע שהיה מקודם
         if (now - lastMoveTime < moveCooldown) return; 
 
